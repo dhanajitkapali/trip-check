@@ -26,11 +26,55 @@
   <body>
     <div class="app">
       <header class="header">
-        <div class="header__top">
-          <h1 class="header__title">Trip Check<span class="accent">.</span></h1>
-          <button id="resetBtn" class="btn-reset" type="button">Reset</button>
+        <div class="header__row">
+          <div class="header__titles">
+            <h1 class="header__title">Trip Check<span class="accent">.</span></h1>
+            <p id="dateLine" class="header__date"></p>
+          </div>
+
+          <div class="header__actions">
+            <button id="resetBtn" class="icon-btn" type="button" aria-label="Reset checklist">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7" />
+                <polyline points="3 4 3 9 8 9" />
+              </svg>
+            </button>
+
+            <div class="add-wrap">
+              <button
+                id="addBtn"
+                class="icon-btn icon-btn--accent"
+                type="button"
+                aria-label="Add item"
+                aria-expanded="false"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+
+              <div id="popover" class="popover" role="dialog" aria-label="Add an item">
+                <form id="addForm" autocomplete="off">
+                  <input
+                    id="addInput"
+                    class="popover__input"
+                    type="text"
+                    placeholder="Add an item…"
+                    maxlength="40"
+                    aria-label="Item name"
+                  />
+                  <button class="popover__go" type="submit" aria-label="Add">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <polyline points="5 12 10 17 19 8" />
+                    </svg>
+                  </button>
+                </form>
+                <p id="popoverHint" class="popover__hint"></p>
+              </div>
+            </div>
+          </div>
         </div>
-        <p id="dateLine" class="header__date"></p>
 
         <div class="progress">
           <div class="progress__bar"><span id="progressFill"></span></div>
@@ -39,27 +83,20 @@
       </header>
 
       <main>
-        <ul id="list" class="list" aria-label="Packing checklist"></ul>
-
+        <ul id="list" class="grid" aria-label="Packing checklist"></ul>
         <p id="empty" class="empty" hidden>
-          Nothing on your list yet — add your first item below.
+          Nothing here yet — tap <strong>+</strong> to add your first item.
         </p>
+        <p class="hint">Tap to check · Hold to delete</p>
       </main>
-
-      <form id="addForm" class="add" autocomplete="off">
-        <input
-          id="addInput"
-          class="add__input"
-          type="text"
-          placeholder="Add an item…"
-          maxlength="60"
-          aria-label="Add an item"
-        />
-        <button class="add__btn" type="submit" aria-label="Add">+</button>
-      </form>
     </div>
 
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="scrim" class="scrim"></div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite">
+      <span id="toastMsg"></span>
+      <button id="toastAction" class="toast__action" type="button" hidden>Undo</button>
+    </div>
 
     <script src="app.js"></script>
   </body>

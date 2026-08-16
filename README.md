@@ -9,10 +9,24 @@ you leave — towel, bottle, charger — and it's a clean slate tomorrow.
 
 - **Daily auto-reset** — the app stores the day it was last used. Open it on a
   new calendar day and every tick clears automatically. Your *item list* stays.
-- **Reset button** — clears the ticks on demand (for a second trip the same day).
-- **Editable list** — add or delete items in the app; the list persists.
 - **Installable** — Add to Home Screen on iPhone/Android and it runs fullscreen,
   offline included.
+
+### Interactions
+
+| Gesture | What happens |
+| --- | --- |
+| **Tap** a tile | Checks / unchecks it |
+| **Hold** a tile (~0.5s) | Deletes it — a trash icon fades in while you hold, and the toast offers **Undo** |
+| **+** (top right) | Opens a floating field to add an item |
+| **↺** (top right) | Clears every tick, also undoable |
+
+Adding an item that's already on the list won't create a duplicate: the field
+shakes, tells you it exists, and the matching tile flashes. The check ignores
+case and extra spaces, so `  sunGLASSES ` matches `Sunglasses`.
+
+Dragging on a tile scrolls the page instead of triggering the hold, so the
+gesture never fires by accident while scrolling.
 
 Everything is stored in the browser's `localStorage`, so there's no backend and
 no account. That also means state is **per-device** — your phone and laptop keep

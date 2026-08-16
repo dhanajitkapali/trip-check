@@ -5,6 +5,8 @@
   "use strict";
 
   var STORAGE_KEY = "tripCheck.v1";
+  var HOLD_MS = 550; // keep in sync with --hold in styles.css
+  var MOVE_TOLERANCE = 12; // px of finger drift before a hold counts as a scroll
 
   var DEFAULT_ITEMS = [
     "Wallet",
@@ -89,25 +91,51 @@
   var dateLineEl = document.getElementById("dateLine");
   var fillEl = document.getElementById("progressFill");
   var progressTextEl = document.getElementById("progressText");
+  var addBtn = document.getElementById("addBtn");
+  var popoverEl = document.getElementById("popover");
+  var popoverHintEl = document.getElementById("popoverHint");
   var formEl = document.getElementById("addForm");
   var inputEl = document.getElementById("addInput");
   var resetBtn = document.getElementById("resetBtn");
+  var scrimEl = document.getElementById("scrim");
   var toastEl = document.getElementById("toast");
-
-  var toastTimer;
-  function toast(msg) {
-    toastEl.textContent = msg;
-    toastEl.classList.add("is-visible");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () {
-      toastEl.classList.remove("is-visible");
-    }, 2200);
-  }
+  var toastMsgEl = document.getElementById("toastMsg");
+  var toastActionEl = document.getElementById("toastAction");
 
   var CHECK_SVG =
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+  var TRASH_SVG =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/>' +
+    '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>' +
+    '<path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
 
-  /* ---------- render ---------- */
+  /* ---------- toast ---------- */
+
+  var toastTimer;
+  var undoHandler = null;
+
+  function toast(msg, onUndo) {
+    toastMsgEl.textContent = msg;
+    undoHandler = onUndo || null;
+    toastActionEl.hidden = !undoHandler;
+    toastEl.classList.add("is-visible");
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, undoHandler ? 4000 : 2200);
+  }
+
+  function hideToast() {
+    toastEl.classList.remove("is-visible");
+    undoHandler = null;
+    toastActionEl.hidden = true;
+  }
+
+  toastActionEl.addEventListener("click", function () {
+    if (undoHandler) undoHandler();
+    hideToast();
+  });
+
+  /* ---------- rendering ---------- */
 
   function renderDate() {
     dateLineEl.textContent = new Date().toLocaleDateString(undefined, {
@@ -122,9 +150,8 @@
     var done = state.items.filter(function (it) {
       return it.checked;
     }).length;
-    var pct = total ? Math.round((done / total) * 100) : 0;
 
-    fillEl.style.width = pct + "%";
+    fillEl.style.width = (total ? Math.round((done / total) * 100) : 0) + "%";
     fillEl.classList.toggle("is-done", total > 0 && done === total);
 
     if (!total) {
@@ -134,56 +161,57 @@
     } else {
       progressTextEl.textContent = done + " of " + total + " packed";
     }
+
+    emptyEl.hidden = total > 0;
+  }
+
+  function createItemEl(item, index) {
+    var li = document.createElement("li");
+    li.className = "item" + (item.checked ? " is-checked" : "");
+    li.dataset.id = item.id;
+    li.style.setProperty("--i", index);
+    li.setAttribute("role", "checkbox");
+    li.setAttribute("aria-checked", item.checked ? "true" : "false");
+    li.tabIndex = 0;
+
+    var box = document.createElement("span");
+    box.className = "item__box";
+    box.innerHTML = CHECK_SVG;
+
+    var label = document.createElement("span");
+    label.className = "item__label";
+    label.textContent = item.label;
+
+    var hold = document.createElement("span");
+    hold.className = "item__hold";
+    hold.innerHTML = TRASH_SVG;
+
+    li.appendChild(box);
+    li.appendChild(label);
+    li.appendChild(hold);
+    return li;
   }
 
   function renderList() {
     listEl.innerHTML = "";
-
-    state.items.forEach(function (item) {
-      var li = document.createElement("li");
-      li.className = "item" + (item.checked ? " is-checked" : "");
-      li.dataset.id = item.id;
-      li.setAttribute("role", "checkbox");
-      li.setAttribute("aria-checked", item.checked ? "true" : "false");
-      li.tabIndex = 0;
-
-      var box = document.createElement("span");
-      box.className = "item__box";
-      box.innerHTML = CHECK_SVG;
-
-      var label = document.createElement("span");
-      label.className = "item__label";
-      label.textContent = item.label;
-
-      var del = document.createElement("button");
-      del.className = "item__del";
-      del.type = "button";
-      del.textContent = "✕";
-      del.setAttribute("aria-label", "Delete " + item.label);
-
-      li.appendChild(box);
-      li.appendChild(label);
-      li.appendChild(del);
-      listEl.appendChild(li);
+    state.items.forEach(function (item, i) {
+      listEl.appendChild(createItemEl(item, i));
     });
-
-    emptyEl.hidden = state.items.length > 0;
     renderProgress();
-  }
-
-  function render() {
-    renderDate();
-    renderList();
   }
 
   /* ---------- actions ---------- */
 
-  // Updates just this row instead of rebuilding the list, so tapping stays
-  // snappy and nothing flickers.
-  function toggle(id) {
-    var item = state.items.find(function (it) {
+  function findItem(id) {
+    return state.items.find(function (it) {
       return it.id === id;
     });
+  }
+
+  // Updates just this tile instead of rebuilding the grid, so nothing flickers
+  // and the entrance animations don't replay.
+  function toggle(id) {
+    var item = findItem(id);
     if (!item) return;
 
     item.checked = !item.checked;
@@ -198,76 +226,240 @@
   }
 
   function remove(id) {
-    var item = state.items.find(function (it) {
+    var index = state.items.findIndex(function (it) {
       return it.id === id;
     });
-    state.items = state.items.filter(function (it) {
-      return it.id !== id;
-    });
+    if (index === -1) return;
+
+    var item = state.items[index];
+    var li = listEl.querySelector('[data-id="' + id + '"]');
+
+    state.items.splice(index, 1);
     save();
-    renderList();
-    if (item) toast("Removed " + item.label);
+
+    if (li) {
+      li.classList.remove("is-holding");
+      li.classList.add("is-removing");
+      setTimeout(function () {
+        if (li.parentNode) li.parentNode.removeChild(li);
+      }, 260);
+    }
+    renderProgress();
+
+    toast("Removed " + item.label, function () {
+      state.items.splice(Math.min(index, state.items.length), 0, item);
+      save();
+      renderList();
+    });
   }
 
-  function add(label) {
-    label = label.trim();
+  function existing(label) {
+    var wanted = label.trim().toLowerCase();
+    return state.items.find(function (it) {
+      return it.label.toLowerCase() === wanted;
+    });
+  }
+
+  function showHint(msg) {
+    popoverHintEl.textContent = msg;
+    popoverHintEl.classList.add("is-visible");
+    popoverEl.classList.remove("is-shaking");
+    void popoverEl.offsetWidth; // restart the animation
+    popoverEl.classList.add("is-shaking");
+  }
+
+  function clearHint() {
+    popoverHintEl.classList.remove("is-visible");
+    popoverEl.classList.remove("is-shaking");
+  }
+
+  // Points out the tile that already exists rather than silently doing nothing.
+  function flash(id) {
+    var li = listEl.querySelector('[data-id="' + id + '"]');
+    if (!li) return;
+    li.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    li.classList.remove("is-flash");
+    void li.offsetWidth;
+    li.classList.add("is-flash");
+    setTimeout(function () {
+      li.classList.remove("is-flash");
+    }, 700);
+  }
+
+  function add(rawLabel) {
+    var label = rawLabel.trim().replace(/\s+/g, " ");
     if (!label) return;
 
-    var dupe = state.items.some(function (it) {
-      return it.label.toLowerCase() === label.toLowerCase();
-    });
+    var dupe = existing(label);
     if (dupe) {
-      toast(label + " is already on the list");
+      showHint('"' + dupe.label + '" is already on the list');
+      flash(dupe.id);
+      inputEl.select();
       return;
     }
 
-    state.items.push(makeItem(label));
+    var item = makeItem(label);
+    state.items.push(item);
     save();
-    renderList();
+
+    var li = createItemEl(item, 0);
+    listEl.appendChild(li);
+    renderProgress();
+
+    inputEl.value = "";
+    clearHint();
   }
 
   function resetChecks() {
-    var any = state.items.some(function (it) {
+    resetBtn.classList.remove("is-spinning");
+    void resetBtn.offsetWidth;
+    resetBtn.classList.add("is-spinning");
+
+    var checked = state.items.filter(function (it) {
       return it.checked;
     });
-    if (!any) {
+    if (!checked.length) {
       toast("Nothing to reset");
       return;
     }
-    state.items.forEach(function (it) {
+
+    checked.forEach(function (it) {
       it.checked = false;
     });
     state.date = today();
     save();
-    renderList();
-    toast("Checklist cleared");
+
+    Array.prototype.forEach.call(
+      listEl.querySelectorAll(".item.is-checked"),
+      function (li) {
+        li.classList.remove("is-checked");
+        li.setAttribute("aria-checked", "false");
+      }
+    );
+    renderProgress();
+
+    toast("Checklist cleared", function () {
+      checked.forEach(function (it) {
+        it.checked = true;
+      });
+      save();
+      renderList();
+    });
   }
 
-  /* ---------- events ---------- */
+  /* ---------- popover ---------- */
 
-  listEl.addEventListener("click", function (e) {
-    var li = e.target.closest(".item");
-    if (!li) return;
-    if (e.target.closest(".item__del")) {
-      remove(li.dataset.id);
-    } else {
-      toggle(li.dataset.id);
-    }
-  });
+  function openPopover() {
+    popoverEl.classList.add("is-open");
+    scrimEl.classList.add("is-open");
+    addBtn.classList.add("is-open");
+    addBtn.setAttribute("aria-expanded", "true");
+    clearHint();
+    setTimeout(function () {
+      inputEl.focus();
+    }, 120);
+  }
 
-  listEl.addEventListener("keydown", function (e) {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    var li = e.target.closest(".item");
-    if (!li) return;
-    e.preventDefault();
-    toggle(li.dataset.id);
-  });
+  function closePopover() {
+    popoverEl.classList.remove("is-open");
+    scrimEl.classList.remove("is-open");
+    addBtn.classList.remove("is-open");
+    addBtn.setAttribute("aria-expanded", "false");
+    inputEl.blur();
+    clearHint();
+  }
+
+  function togglePopover() {
+    if (popoverEl.classList.contains("is-open")) closePopover();
+    else openPopover();
+  }
+
+  addBtn.addEventListener("click", togglePopover);
+  scrimEl.addEventListener("click", closePopover);
 
   formEl.addEventListener("submit", function (e) {
     e.preventDefault();
     add(inputEl.value);
-    inputEl.value = "";
-    inputEl.blur();
+  });
+
+  inputEl.addEventListener("input", clearHint);
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && popoverEl.classList.contains("is-open")) {
+      closePopover();
+    }
+  });
+
+  /* ---------- tap to check, hold to delete ---------- */
+
+  var holdTimer = null;
+  var holdEl = null;
+  var holdFired = false;
+  var startX = 0;
+  var startY = 0;
+
+  function cancelHold() {
+    clearTimeout(holdTimer);
+    holdTimer = null;
+    if (holdEl) holdEl.classList.remove("is-holding");
+    holdEl = null;
+  }
+
+  listEl.addEventListener("pointerdown", function (e) {
+    var li = e.target.closest(".item");
+    if (!li || e.button === 2) return;
+
+    holdFired = false;
+    holdEl = li;
+    startX = e.clientX;
+    startY = e.clientY;
+    li.classList.add("is-holding");
+
+    holdTimer = setTimeout(function () {
+      holdFired = true;
+      var id = li.dataset.id;
+      cancelHold();
+      remove(id);
+    }, HOLD_MS);
+  });
+
+  // A finger that drifts is a scroll, not a hold.
+  listEl.addEventListener("pointermove", function (e) {
+    if (!holdEl) return;
+    if (
+      Math.abs(e.clientX - startX) > MOVE_TOLERANCE ||
+      Math.abs(e.clientY - startY) > MOVE_TOLERANCE
+    ) {
+      cancelHold();
+    }
+  });
+
+  listEl.addEventListener("pointerup", function (e) {
+    var li = e.target.closest(".item");
+    var wasHolding = holdEl;
+    cancelHold();
+    if (holdFired || !li || li !== wasHolding) return;
+    toggle(li.dataset.id);
+  });
+
+  listEl.addEventListener("pointercancel", cancelHold);
+  listEl.addEventListener("pointerleave", cancelHold);
+
+  // Stop iOS/desktop showing their own long-press menus over a tile.
+  listEl.addEventListener("contextmenu", function (e) {
+    if (e.target.closest(".item")) e.preventDefault();
+  });
+
+  listEl.addEventListener("keydown", function (e) {
+    var li = e.target.closest(".item");
+    if (!li) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggle(li.dataset.id);
+    } else if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      remove(li.dataset.id);
+    }
   });
 
   resetBtn.addEventListener("click", resetChecks);
@@ -277,14 +469,16 @@
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState !== "visible") return;
     if (rolloverIfNewDay()) {
-      render();
+      renderDate();
+      renderList();
       toast("New day — checklist reset");
     }
   });
 
   /* ---------- start ---------- */
 
-  render();
+  renderDate();
+  renderList();
   if (rolledOver) toast("New day — checklist reset");
 
   if ("serviceWorker" in navigator) {
