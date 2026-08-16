@@ -286,16 +286,18 @@
     }, 700);
   }
 
+  // Returns true when an item was actually added, so the caller knows whether
+  // to dismiss the field or keep it open showing the reason.
   function add(rawLabel) {
     var label = rawLabel.trim().replace(/\s+/g, " ");
-    if (!label) return;
+    if (!label) return false;
 
     var dupe = existing(label);
     if (dupe) {
       showHint('"' + dupe.label + '" is already on the list');
       flash(dupe.id);
       inputEl.select();
-      return;
+      return false;
     }
 
     var item = makeItem(label);
@@ -308,6 +310,11 @@
 
     inputEl.value = "";
     clearHint();
+
+    // The field closes on success, so point at where the new tile landed —
+    // it may well be below the fold.
+    flash(item.id);
+    return true;
   }
 
   function resetChecks() {
@@ -355,9 +362,12 @@
     addBtn.classList.add("is-open");
     addBtn.setAttribute("aria-expanded", "true");
     clearHint();
-    setTimeout(function () {
-      inputEl.focus();
-    }, 120);
+
+    // iOS only raises the keyboard when focus() runs synchronously inside the
+    // tap handler — no setTimeout. The reflow flushes `visibility: hidden`
+    // first, since a hidden input can't take focus.
+    void popoverEl.offsetWidth;
+    inputEl.focus();
   }
 
   function closePopover() {
@@ -379,7 +389,7 @@
 
   formEl.addEventListener("submit", function (e) {
     e.preventDefault();
-    add(inputEl.value);
+    if (add(inputEl.value)) closePopover();
   });
 
   inputEl.addEventListener("input", clearHint);

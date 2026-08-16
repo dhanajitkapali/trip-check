@@ -1,7 +1,7 @@
 /* Cache-first for the app shell so the checklist opens instantly and works
    offline (handy at airports). Bump CACHE to ship an update. */
 
-var CACHE = "trip-check-v2";
+var CACHE = "trip-check-v3";
 var SHELL = [
   "./",
   "./index.html",
